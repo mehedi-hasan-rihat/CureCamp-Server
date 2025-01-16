@@ -38,7 +38,7 @@ app.post("/jwt", async (req, res) => {
   res.send({ token });
 });
 
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const uri = `mongodb+srv://${process.env.db_username}:${process.env.db_password}@cluster0.sqw4h.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
 const client = new MongoClient(uri, {
@@ -60,6 +60,7 @@ async function run() {
     const CureCampDB = client.db("CureCamp");
     const campainCollection = CureCampDB.collection("campains");
     const reviewCollection = CureCampDB.collection("reviews");
+    const participantCollection = CureCampDB.collection("participants");
 
     // For add many data in a time by POSTMAN
     app.post("/add-db", async (req, res) => {
@@ -67,6 +68,17 @@ async function run() {
       const response = await reviewCollection.insertMany(data);
       console.log(response);
       res.send({ response });
+    });
+
+    // get specific camp
+    app.get("/camp-details/:id", async (req, res) => {
+      const { id } = req.params;
+      console.log(id);
+      const campainData = await campainCollection.findOne({
+        _id: new ObjectId(id),
+      });
+      console.log(campainData);
+      res.send(campainData);
     });
 
     // get Popular Campain
@@ -87,11 +99,9 @@ async function run() {
       if (search) {
         query = {
           $or: [
-            { campName: { $regex: search, $options: "i" } }, 
-            { description: { $regex: search, $options: "i" }
-           },
-           { date: { $regex: search, $options: "i" },
-          }
+            { campName: { $regex: search, $options: "i" } },
+            { description: { $regex: search, $options: "i" } },
+            { date: { $regex: search, $options: "i" } },
           ],
         };
       }
@@ -104,7 +114,10 @@ async function run() {
       } else if (sortBy === "Camp_Name") {
         sortOptions = { campName: 1 };
       }
-      const campainData = await campainCollection.find(query).sort(sortOptions).toArray();
+      const campainData = await campainCollection
+        .find(query)
+        .sort(sortOptions)
+        .toArray();
       console.log(sortOptions);
       res.send(campainData);
     });
@@ -113,6 +126,17 @@ async function run() {
     app.get("/reviews", async (req, res) => {
       const reviewData = await reviewCollection.find().toArray();
       res.send(reviewData);
+    });
+
+    // Register a campain
+    app.post("/register-campain", async (req, res) => {
+      const participant = req.body;
+      const response = await participantCollection.insertOne(participant);
+      await campainCollection.updateOne(
+        { _id: new ObjectId(participant.campainId) },
+        { $inc: { participantCount: 1 } }
+      );
+      res.send(response);
     });
   } finally {
     // await client.close();
