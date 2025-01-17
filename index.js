@@ -66,18 +66,16 @@ async function run() {
     app.post("/add-db", async (req, res) => {
       const data = req.body;
       const response = await reviewCollection.insertMany(data);
-      console.log(response);
       res.send({ response });
     });
 
     // get specific camp
     app.get("/camp-details/:id", async (req, res) => {
       const { id } = req.params;
-      console.log(id);
+  
       const campainData = await campainCollection.findOne({
         _id: new ObjectId(id),
       });
-      console.log(campainData);
       res.send(campainData);
     });
 
@@ -91,10 +89,16 @@ async function run() {
       res.send(campainData);
     });
 
+    // add a Campain
+    app.post("/add-camp", async (req, res) => {
+      const campainData = req.body
+      const response = await campainCollection.insertOne(campainData)
+      res.send(response);
+    });
+
     // get all camps
     app.get("/campains", async (req, res) => {
       const { search, sortBy } = req.query;
-      console.log(sortBy);
       let query = {};
       if (search) {
         query = {
@@ -118,7 +122,6 @@ async function run() {
         .find(query)
         .sort(sortOptions)
         .toArray();
-      console.log(sortOptions);
       res.send(campainData);
     });
 
