@@ -72,7 +72,7 @@ async function run() {
     // get specific camp
     app.get("/camp-details/:id", async (req, res) => {
       const { id } = req.params;
-  
+
       const campainData = await campainCollection.findOne({
         _id: new ObjectId(id),
       });
@@ -91,14 +91,16 @@ async function run() {
 
     // add a Campain
     app.post("/add-camp", async (req, res) => {
-      const campainData = req.body
-      const response = await campainCollection.insertOne(campainData)
+      const campainData = req.body;
+      console.log(campainData);
+      const response = await campainCollection.insertOne(campainData);
       res.send(response);
     });
 
     // get all camps
     app.get("/campains", async (req, res) => {
       const { search, sortBy } = req.query;
+      console.log(search, sortBy, 4);
       let query = {};
       if (search) {
         query = {
@@ -125,6 +127,30 @@ async function run() {
       res.send(campainData);
     });
 
+    // update a campain
+    app.patch("/update-camp/:id", async (req, res) => {
+      const { id } = req.params;
+      const data = req.body;
+      console.log(data);
+      const updateDoc = { $set: data };
+
+      const response = await campainCollection.updateOne(
+        { _id: new ObjectId(id) },
+        updateDoc
+      );
+      res.send(response);
+    });
+
+    // delete a camp
+    app.delete("/delete-camp/:id", async (req, res) => {
+      const { id } = req.params;
+      const response = await campainCollection.deleteOne({
+        _id: new ObjectId(id),
+      });
+      console.log(response);
+      res.send(response);
+    });
+
     // get review data
     app.get("/reviews", async (req, res) => {
       const reviewData = await reviewCollection.find().toArray();
@@ -134,11 +160,88 @@ async function run() {
     // Register a campain
     app.post("/register-campain", async (req, res) => {
       const participant = req.body;
-      const response = await participantCollection.insertOne(participant);
+      const registerData = {
+        ...participant,
+        "payment-status": "unpaid",
+        "confirmation-status": "Pending",
+      };
+      console.log(registerData);
+      const response = await participantCollection.insertOne(registerData);
       await campainCollection.updateOne(
         { _id: new ObjectId(participant.campainId) },
         { $inc: { participantCount: 1 } }
       );
+      res.send(response);
+    });
+
+    // delete a registered camp
+    app.delete("/delete-reg-camp/:id", async (req, res) => {
+      const { id } = req.params;
+      const response = await participantCollection.deleteOne({
+        _id: new ObjectId(id),
+      });
+      console.log(response);
+      res.send(response);
+    });
+
+    //for Manage Registered Camps
+    app.get("/manage-registered-camps", async (req, res) => {
+      const result = await participantCollection
+        .aggregate([
+          {
+            $addFields: {
+              campainId: {
+                $toObjectId: "$campainId",
+              },
+            },
+          },
+          {
+            $lookup: {
+              from: "campains",
+              localField: "campainId",
+              foreignField: "_id",
+              as: "camps",
+            },
+          },
+          {
+            $unwind: "$camps",
+          },
+          {
+            $addFields: {
+              campName: "$camps.campName",
+              campFees: "$camps.campFees",
+            },
+          },
+          {
+            $project: {
+              participantName: 1,
+              "payment-status": 1,
+              "confirmation-status": 1,
+              campName: 1,
+              campFees: 1,
+            },
+          },
+        ])
+        .toArray();
+      res.send(result);
+    });
+
+    // update Confirmation Status
+    app.patch("/update-confirmation-status/:id", async (req, res) => {
+      const { id } = req.params;
+      const data = req.body.e;
+      console.log(data);
+      const updateDoc = {
+        $set: {
+          "confirmation-status": data,
+        },
+      };
+
+      const response = await participantCollection.updateOne(
+        { _id: new ObjectId(id) },
+        updateDoc
+      );
+      console.log(data, updateDoc);
       res.send(response);
     });
   } finally {
