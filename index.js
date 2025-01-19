@@ -63,6 +63,7 @@ async function run() {
     const campainCollection = CureCampDB.collection("campains");
     const reviewCollection = CureCampDB.collection("reviews");
     const participantCollection = CureCampDB.collection("participants");
+    const paymentCollection = CureCampDB.collection("payments");
 
     // For add many data in a time by POSTMAN
     app.post("/add-db", async (req, res) => {
@@ -281,6 +282,7 @@ async function run() {
       res.send(result);
     });
 
+    // update confirmation status
     app.patch("/update-confirmation-status/:id", async (req, res) => {
       const { id } = req.params;
       const data = req.body.e;
@@ -299,6 +301,7 @@ async function run() {
       res.send(response);
     });
 
+    // payment intant
     app.post("/payment-intent", async (req, res) => {
       const { campId } = req.body;
       const camp = await campainCollection.findOne({
@@ -313,6 +316,22 @@ async function run() {
     
       res.send({ clientSecret : client_secret });
     });
+
+
+    // // save payments
+    app.post("/payments", async (req, res) => {
+      const paymentData = req.body;
+      const response = await paymentCollection.insertOne({...paymentData, paymentOn : new Date()});
+      await participantCollection.updateOne(
+        { _id: new ObjectId(paymentData._id) },
+      {  $set:{ 'payment-status': 'paid' }}
+      );
+      res.send(response);
+    });
+
+
+
+
   } finally {
     // await client.close();
   }
