@@ -325,7 +325,7 @@ async function run() {
       res.send({ clientSecret: client_secret });
     });
 
-    // // save payments
+    // save payments
     app.post("/payments", async (req, res) => {
       const paymentData = req.body;
       console.log(paymentData);
@@ -339,6 +339,79 @@ async function run() {
       );
       console.log(updRes);
       res.send(response);
+    });
+
+    // get payment history
+    app.get("/payments/:email", async (req, res) => {
+      const { email } = req.params;
+      console.log(email,5);
+      const query = { participantEmail: email };
+      const result = await paymentCollection
+        .aggregate([
+          {
+            $match: query,
+          },
+          {
+            $addFields: {
+              participantId: {
+                $toObjectId: "$participantId",
+              },
+            },
+          },
+          {
+            $lookup: {
+              from: "participants",
+              localField: "participantId",
+              foreignField: "_id",
+              as: "participant",
+            },
+          },
+          {
+            $unwind: "$participant",
+          },
+          {
+            $addFields: {
+              campId: {
+                $toObjectId: "$participant.campainId",
+              },
+              "confirmation-status": "$participant.confirmation-status",
+              "payment-status": "$participant.payment-status",
+            },
+          },
+          {
+            $project: {
+              campId: 1,
+              "confirmation-status": 1,
+              "payment-status": 1,
+              tnxId : 1
+            },
+          },
+          {
+            $lookup: {
+              from: "campains",
+              localField: "campId",
+              foreignField: "_id",
+              as: "camp",
+            },
+          },
+          {
+            $unwind: "$camp",
+          },
+          {
+            $addFields: {
+              campName: "$camp.campName",
+              campFees: "$camp.campFees",
+            },
+          },
+          {
+            $project : {
+              camp : 0,
+              campId : 0
+            }
+          }
+        ])
+        .toArray();
+      res.send(result);
     });
   } finally {
     // await client.close();
