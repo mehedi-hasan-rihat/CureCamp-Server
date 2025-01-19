@@ -157,8 +157,16 @@ async function run() {
 
     // get review data
     app.get("/reviews", async (req, res) => {
-      const reviewData = await reviewCollection.find().toArray();
-      res.send(reviewData);
+      const reviewRes = await reviewCollection.find().toArray();
+      res.send(reviewRes);
+    });
+
+    // add review data
+    app.post("/reviews", async (req, res) => {
+      const data = req.body;
+      console.log(data);
+      const reviewRes = await reviewCollection.insertOne(data);
+      res.send(reviewRes);
     });
 
     // Register a campain
@@ -223,7 +231,7 @@ async function run() {
               "confirmation-status": 1,
               campName: 1,
               campFees: 1,
-              campainId : 1
+              campainId: 1,
             },
           },
         ])
@@ -309,29 +317,29 @@ async function run() {
       });
       if (!camp) return res.status(400).send({ message: "Campain Not Found" });
       const totalPrice = camp?.campFees * 100;
-      const {client_secret} = await stripe.paymentIntents.create({
+      const { client_secret } = await stripe.paymentIntents.create({
         amount: totalPrice,
         currency: "usd",
       });
-    
-      res.send({ clientSecret : client_secret });
-    });
 
+      res.send({ clientSecret: client_secret });
+    });
 
     // // save payments
     app.post("/payments", async (req, res) => {
       const paymentData = req.body;
-      const response = await paymentCollection.insertOne({...paymentData, paymentOn : new Date()});
-      await participantCollection.updateOne(
-        { _id: new ObjectId(paymentData._id) },
-      {  $set:{ 'payment-status': 'paid' }}
+      console.log(paymentData);
+      const response = await paymentCollection.insertOne({
+        ...paymentData,
+        paymentOn: new Date(),
+      });
+      const updRes = await participantCollection.updateOne(
+        { _id: new ObjectId(paymentData.participantId) },
+        { $set: { "payment-status": "paid" } }
       );
+      console.log(updRes);
       res.send(response);
     });
-
-
-
-
   } finally {
     // await client.close();
   }
