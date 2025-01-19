@@ -7,6 +7,8 @@ const port = 5000;
 const cors = require("cors");
 app.use(express.json());
 app.use(cookieParser());
+const stripe = require("stripe")(process.env.stripe_key);
+
 app.use(
   cors({
     origin: ["http://localhost:5174", "http://localhost:5173"],
@@ -76,6 +78,7 @@ async function run() {
       const campainData = await campainCollection.findOne({
         _id: new ObjectId(id),
       });
+      console.log(campainData);
       res.send(campainData);
     });
 
@@ -219,6 +222,7 @@ async function run() {
               "confirmation-status": 1,
               campName: 1,
               campFees: 1,
+              campainId : 1
             },
           },
         ])
@@ -226,7 +230,57 @@ async function run() {
       res.send(result);
     });
 
-    // update Confirmation Status
+    // get registration camp by email
+    app.get("/analytics-registered-camps/:email", async (req, res) => {
+      const { email } = req.params;
+      const query = { participantEmail: email };
+      const result = await participantCollection
+        .aggregate([
+          {
+            $match: query,
+          },
+          {
+            $addFields: {
+              campainId: {
+                $toObjectId: "$campainId",
+              },
+            },
+          },
+          {
+            $lookup: {
+              from: "campains",
+              localField: "campainId",
+              foreignField: "_id",
+              as: "camps",
+            },
+          },
+          {
+            $unwind: "$camps",
+          },
+          {
+            $addFields: {
+              campName: "$camps.campName",
+              campFees: "$camps.campFees",
+              participantCount: "$camps.participantCount",
+              campDate: "$camps.date",
+            },
+          },
+          {
+            $project: {
+              participantName: 1,
+              "payment-status": 1,
+              "confirmation-status": 1,
+              campName: 1,
+              campFees: 1,
+              participantCount: 1,
+              campDate: 1,
+            },
+          },
+        ])
+        .toArray();
+      res.send(result);
+    });
+
     app.patch("/update-confirmation-status/:id", async (req, res) => {
       const { id } = req.params;
       const data = req.body.e;
@@ -243,6 +297,21 @@ async function run() {
       );
       console.log(data, updateDoc);
       res.send(response);
+    });
+
+    app.post("/payment-intent", async (req, res) => {
+      const { campId } = req.body;
+      const camp = await campainCollection.findOne({
+        _id: new ObjectId(campId),
+      });
+      if (!camp) return res.status(400).send({ message: "Campain Not Found" });
+      const totalPrice = camp?.campFees * 100;
+      const {client_secret} = await stripe.paymentIntents.create({
+        amount: totalPrice,
+        currency: "usd",
+      });
+    
+      res.send({ clientSecret : client_secret });
     });
   } finally {
     // await client.close();
