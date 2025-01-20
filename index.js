@@ -64,12 +64,35 @@ async function run() {
     const reviewCollection = CureCampDB.collection("reviews");
     const participantCollection = CureCampDB.collection("participants");
     const paymentCollection = CureCampDB.collection("payments");
+    const userCollection = CureCampDB.collection("users");
 
     // For add many data in a time by POSTMAN
     app.post("/add-db", async (req, res) => {
       const data = req.body;
       const response = await reviewCollection.insertMany(data);
       res.send({ response });
+    });
+
+    // save Users
+    app.post("/users", async (req, res) => {
+      const data = req.body;
+      const response = await userCollection.insertOne({...data, role : "user"});
+      res.send( response );
+    });
+
+    // get user
+    app.get("/users/:email", async (req, res) => {
+      const {email} = req.params
+      const response = await userCollection.findOne({email});
+      res.send( response );
+    });
+
+    // update userData
+    app.put("/users/:email", async (req, res) => {
+      const {email} = req.params
+      const data = req.body
+      const response = await userCollection.updateOne({email},{$set : {name : data.name, location : data.location, number : data.number}});
+      res.send( response );
     });
 
     // get specific camp
@@ -240,7 +263,7 @@ async function run() {
     });
 
     // get registration camp by email
-    app.get("/analytics-registered-camps/:email", async (req, res) => {
+    app.get("/registered-camps/:email", async (req, res) => {
       const { email } = req.params;
       const query = { participantEmail: email };
       const result = await participantCollection
@@ -268,6 +291,7 @@ async function run() {
           },
           {
             $addFields: {
+              campId : "$camps._id",
               campName: "$camps.campName",
               campFees: "$camps.campFees",
               participantCount: "$camps.participantCount",
@@ -283,6 +307,7 @@ async function run() {
               campFees: 1,
               participantCount: 1,
               campDate: 1,
+              campId : 1
             },
           },
         ])
