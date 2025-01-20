@@ -76,23 +76,35 @@ async function run() {
     // save Users
     app.post("/users", async (req, res) => {
       const data = req.body;
-      const response = await userCollection.insertOne({...data, role : "user"});
-      res.send( response );
+      const response = await userCollection.insertOne({
+        ...data,
+        role: "user",
+      });
+      res.send(response);
     });
 
     // get user
     app.get("/users/:email", async (req, res) => {
-      const {email} = req.params
-      const response = await userCollection.findOne({email});
-      res.send( response );
+      const { email } = req.params;
+      const response = await userCollection.findOne({ email });
+      res.send(response);
     });
 
     // update userData
     app.put("/users/:email", async (req, res) => {
-      const {email} = req.params
-      const data = req.body
-      const response = await userCollection.updateOne({email},{$set : {name : data.name, location : data.location, number : data.number}});
-      res.send( response );
+      const { email } = req.params;
+      const data = req.body;
+      const response = await userCollection.updateOne(
+        { email },
+        {
+          $set: {
+            name: data.name,
+            location: data.location,
+            number: data.number,
+          },
+        }
+      );
+      res.send(response);
     });
 
     // get specific camp
@@ -152,6 +164,17 @@ async function run() {
         .sort(sortOptions)
         .toArray();
       res.send(campainData);
+    });
+
+    app.get("/campains/:page", async (req, res) => {
+      const { page } = req.params;
+      const campainData = await campainCollection
+          .find().skip((page - 1) * 10)
+        .limit(10)
+        .toArray();
+        console.log(campainData);
+        const totalData = await campainCollection.estimatedDocumentCount();
+        res.send({ result:campainData, totalData });
     });
 
     // update a campain
@@ -262,8 +285,110 @@ async function run() {
       res.send(result);
     });
 
+    app.get("/manage-registered-camps-pagination/:page", async (req, res) => {
+      const { page } = req.params;
+      const result = await participantCollection
+        .aggregate([
+          {
+            $addFields: {
+              campainId: {
+                $toObjectId: "$campainId",
+              },
+            },
+          },
+          {
+            $lookup: {
+              from: "campains",
+              localField: "campainId",
+              foreignField: "_id",
+              as: "camps",
+            },
+          },
+          {
+            $unwind: "$camps",
+          },
+          {
+            $addFields: {
+              campName: "$camps.campName",
+              campFees: "$camps.campFees",
+            },
+          },
+          {
+            $project: {
+              participantName: 1,
+              "payment-status": 1,
+              "confirmation-status": 1,
+              campName: 1,
+              campFees: 1,
+              campainId: 1,
+            },
+          },
+        ])
+        .skip((page - 1) * 10)
+        .limit(10)
+        .toArray();
+      const totalData = await participantCollection.estimatedDocumentCount();
+      res.send({ result, totalData });
+    });
+
     // get registration camp by email
     app.get("/registered-camps/:email", async (req, res) => {
+      const { email } = req.params;
+      const {page} = req.query
+      const query = { participantEmail: email };
+      const result = await participantCollection
+        .aggregate([
+          {
+            $match: query,
+          },
+          {
+            $addFields: {
+              campainId: {
+                $toObjectId: "$campainId",
+              },
+            },
+          },
+          {
+            $lookup: {
+              from: "campains",
+              localField: "campainId",
+              foreignField: "_id",
+              as: "camps",
+            },
+          },
+          {
+            $unwind: "$camps",
+          },
+          {
+            $addFields: {
+              campId: "$camps._id",
+              campName: "$camps.campName",
+              campFees: "$camps.campFees",
+              participantCount: "$camps.participantCount",
+              campDate: "$camps.date",
+            },
+          },
+          {
+            $project: {
+              participantName: 1,
+              "payment-status": 1,
+              "confirmation-status": 1,
+              campName: 1,
+              campFees: 1,
+              participantCount: 1,
+              campDate: 1,
+              campId: 1,
+            },
+          },
+        ])
+        .skip((page - 1) * 10)
+        .limit(10)
+        .toArray();
+        const totalData = await participantCollection.countDocuments(query);
+        res.send({ result, totalData });
+    });
+
+    app.get("/analytics-registered-camps/:email", async (req, res) => {
       const { email } = req.params;
       const query = { participantEmail: email };
       const result = await participantCollection
@@ -291,7 +416,7 @@ async function run() {
           },
           {
             $addFields: {
-              campId : "$camps._id",
+              campId: "$camps._id",
               campName: "$camps.campName",
               campFees: "$camps.campFees",
               participantCount: "$camps.participantCount",
@@ -307,13 +432,15 @@ async function run() {
               campFees: 1,
               participantCount: 1,
               campDate: 1,
-              campId : 1
+              campId: 1,
             },
           },
         ])
         .toArray();
-      res.send(result);
+        res.send( result);
     });
+
+
 
     // update confirmation status
     app.patch("/update-confirmation-status/:id", async (req, res) => {
@@ -369,7 +496,8 @@ async function run() {
     // get payment history
     app.get("/payments/:email", async (req, res) => {
       const { email } = req.params;
-      console.log(email,5);
+      const {page} = req.query
+      console.log(email, page);
       const query = { participantEmail: email };
       const result = await paymentCollection
         .aggregate([
@@ -408,7 +536,7 @@ async function run() {
               campId: 1,
               "confirmation-status": 1,
               "payment-status": 1,
-              tnxId : 1
+              tnxId: 1,
             },
           },
           {
@@ -429,14 +557,17 @@ async function run() {
             },
           },
           {
-            $project : {
-              camp : 0,
-              campId : 0
-            }
-          }
+            $project: {
+              camp: 0,
+              campId: 0,
+            },
+          },
         ])
+        .skip((page - 1) * 10)
+        .limit(10)
         .toArray();
-      res.send(result);
+        const totalData = await paymentCollection.countDocuments(query);
+        res.send({ result, totalData });
     });
   } finally {
     // await client.close();
