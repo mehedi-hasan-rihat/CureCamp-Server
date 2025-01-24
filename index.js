@@ -11,7 +11,7 @@ const stripe = require("stripe")(process.env.stripe_key);
 
 app.use(
   cors({
-    origin: ["http://localhost:5174", "http://localhost:5173"],
+    origin: ["http://localhost:5174", "http://localhost:5173","https://curecamp.netlify.app"],
     credentials: true,
   })
 );
@@ -22,9 +22,10 @@ const verifyToken = (req, res, next) => {
     return res.status(401).send({ message: "Unauthorized access" });
   }
   const token = tokenBearer.split(" ")[1];
+  // console.log(token);
   jwt.verify(token, process.env.SECRET, (error, decoded) => {
     if (error) {
-      return res.status(402).send({ message: "Unauthorized access" });
+      return res.status(401).send({ message: "Unauthorized access" });
     }
     req.user = decoded;
     next();
@@ -33,7 +34,7 @@ const verifyToken = (req, res, next) => {
 
 app.post("/jwt", async (req, res) => {
   const email = req.body;
-  console.log(email);
+
   const token = jwt.sign(email, process.env.SECRET, {
     expiresIn: "1h",
   });
@@ -53,11 +54,11 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    await client.connect();
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    // await client.connect();
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
 
     const CureCampDB = client.db("CureCamp");
     const campainCollection = CureCampDB.collection("campains");
@@ -74,8 +75,16 @@ async function run() {
     });
 
     // save Users
-    app.post("/users", async (req, res) => {
+    app.post("/users" , async (req, res) => {
       const data = req.body;
+
+      const isExist = await userCollection.findOne({email:data.email})
+     
+      if(isExist) {
+        res.send({message : "user Exist"})
+    return
+      }
+   
       const response = await userCollection.insertOne({
         ...data,
         role: "user",
@@ -84,14 +93,14 @@ async function run() {
     });
 
     // get user
-    app.get("/users/:email", async (req, res) => {
+    app.get("/users/:email", verifyToken , async (req, res) => {
       const { email } = req.params;
       const response = await userCollection.findOne({ email });
       res.send(response);
     });
 
     // update userData
-    app.put("/users/:email", async (req, res) => {
+    app.put("/users/:email", verifyToken , async (req, res) => {
       const { email } = req.params;
       const data = req.body;
       const response = await userCollection.updateOne(
@@ -114,7 +123,7 @@ async function run() {
       const campainData = await campainCollection.findOne({
         _id: new ObjectId(id),
       });
-      console.log(campainData);
+    
       res.send(campainData);
     });
 
@@ -129,9 +138,9 @@ async function run() {
     });
 
     // add a Campain
-    app.post("/add-camp", async (req, res) => {
+    app.post("/add-camp",verifyToken , async (req, res) => {
       const campainData = req.body;
-      console.log(campainData);
+    
       const response = await campainCollection.insertOne(campainData);
       res.send(response);
     });
@@ -139,7 +148,7 @@ async function run() {
     // get all camps
     app.get("/campains", async (req, res) => {
       const { search, sortBy } = req.query;
-      console.log(search, sortBy, 4);
+    
       let query = {};
       if (search) {
         query = {
@@ -168,20 +177,35 @@ async function run() {
 
     app.get("/campains/:page", async (req, res) => {
       const { page } = req.params;
+      const { search } = req.query;
+      
+      let query = {};
+      if (search) {
+        query = {
+          $or: [
+            { campName: { $regex: search, $options: "i" } },
+            { date: { $regex: search, $options: "i" } },
+            { time: { $regex: search, $options: "i" } },
+            { "Healthcare Professional": { $regex: search, $options: "i" } },
+            { location: { $regex: search, $options: "i" } },
+          ],
+        };
+      }
       const campainData = await campainCollection
-          .find().skip((page - 1) * 10)
+        .find(query)
+        .skip((page - 1) * 10)
         .limit(10)
         .toArray();
-        console.log(campainData);
-        const totalData = await campainCollection.estimatedDocumentCount();
-        res.send({ result:campainData, totalData });
+     
+      const totalData = await campainCollection.countDocuments(query);
+      res.send({ result: campainData, totalData });
     });
 
     // update a campain
-    app.patch("/update-camp/:id", async (req, res) => {
+    app.patch("/update-camp/:id",verifyToken , async (req, res) => {
       const { id } = req.params;
       const data = req.body;
-      console.log(data);
+ 
       const updateDoc = { $set: data };
 
       const response = await campainCollection.updateOne(
@@ -192,12 +216,12 @@ async function run() {
     });
 
     // delete a camp
-    app.delete("/delete-camp/:id", async (req, res) => {
+    app.delete("/delete-camp/:id",verifyToken , async (req, res) => {
       const { id } = req.params;
       const response = await campainCollection.deleteOne({
         _id: new ObjectId(id),
       });
-      console.log(response);
+    
       res.send(response);
     });
 
@@ -208,22 +232,22 @@ async function run() {
     });
 
     // add review data
-    app.post("/reviews", async (req, res) => {
+    app.post("/reviews",verifyToken , async (req, res) => {
       const data = req.body;
-      console.log(data);
+ 
       const reviewRes = await reviewCollection.insertOne(data);
       res.send(reviewRes);
     });
 
     // Register a campain
-    app.post("/register-campain", async (req, res) => {
+    app.post("/register-campain",verifyToken , async (req, res) => {
       const participant = req.body;
       const registerData = {
         ...participant,
         "payment-status": "unpaid",
         "confirmation-status": "Pending",
       };
-      console.log(registerData);
+      
       const response = await participantCollection.insertOne(registerData);
       await campainCollection.updateOne(
         { _id: new ObjectId(participant.campainId) },
@@ -233,17 +257,17 @@ async function run() {
     });
 
     // delete a registered camp
-    app.delete("/delete-reg-camp/:id", async (req, res) => {
+    app.delete("/delete-reg-camp/:id", verifyToken ,async (req, res) => {
       const { id } = req.params;
       const response = await participantCollection.deleteOne({
         _id: new ObjectId(id),
       });
-      console.log(response);
+      
       res.send(response);
     });
 
     //for Manage Registered Camps
-    app.get("/manage-registered-camps", async (req, res) => {
+    app.get("/manage-registered-camps",verifyToken , async (req, res) => {
       const result = await participantCollection
         .aggregate([
           {
@@ -285,8 +309,23 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/manage-registered-camps-pagination/:page", async (req, res) => {
+    app.get("/manage-registered-camps-pagination/:page",verifyToken , async (req, res) => {
       const { page } = req.params;
+      const { search } = req.query;
+    
+      let query = {};
+      if (search) {
+        query = {
+          $or: [
+            { campName: { $regex: search, $options: "i" } },
+            { campFees: { $regex: search, $options: "i" } },
+            { participantName: { $regex: search, $options: "i" } },
+            { "confirmation-status": { $regex: search, $options: "i" } },
+            { "payment-status": { $regex: search, $options: "i" } },
+          ],
+        };
+      }
+
       const result = await participantCollection
         .aggregate([
           {
@@ -323,19 +362,36 @@ async function run() {
               campainId: 1,
             },
           },
+          {
+            $match: query,
+          },
         ])
         .skip((page - 1) * 10)
         .limit(10)
         .toArray();
-      const totalData = await participantCollection.estimatedDocumentCount();
+
+      const totalData = await participantCollection.countDocuments(query);
       res.send({ result, totalData });
     });
 
     // get registration camp by email
-    app.get("/registered-camps/:email", async (req, res) => {
+    app.get("/registered-camps/:email",verifyToken , async (req, res) => {
       const { email } = req.params;
-      const {page} = req.query
+      const { page } = req.query;
       const query = { participantEmail: email };
+      const { search } = req.query;
+     
+      let filter = {};
+      if (search) {
+        filter = {
+          $or: [
+            { campName: { $regex: search, $options: "i" } },
+            { campFees: { $eq: [{$toInt : search}] } },
+            { "confirmation-status": { $regex: search, $options: "i" } },
+            { "payment-status": { $regex: search, $options: "i" } },
+          ],
+        };
+      }
       const result = await participantCollection
         .aggregate([
           {
@@ -380,15 +436,18 @@ async function run() {
               campId: 1,
             },
           },
+          {
+            $match : filter
+          }
         ])
         .skip((page - 1) * 10)
         .limit(10)
         .toArray();
-        const totalData = await participantCollection.countDocuments(query);
-        res.send({ result, totalData });
+      const totalData = await participantCollection.countDocuments(query);
+      res.send({ result, totalData });
     });
 
-    app.get("/analytics-registered-camps/:email", async (req, res) => {
+    app.get("/analytics-registered-camps/:email",verifyToken , async (req, res) => {
       const { email } = req.params;
       const query = { participantEmail: email };
       const result = await participantCollection
@@ -437,16 +496,14 @@ async function run() {
           },
         ])
         .toArray();
-        res.send( result);
+      res.send(result);
     });
 
-
-
     // update confirmation status
-    app.patch("/update-confirmation-status/:id", async (req, res) => {
+    app.patch("/update-confirmation-status/:id",verifyToken , async (req, res) => {
       const { id } = req.params;
       const data = req.body.e;
-      console.log(data);
+      
       const updateDoc = {
         $set: {
           "confirmation-status": data,
@@ -457,13 +514,14 @@ async function run() {
         { _id: new ObjectId(id) },
         updateDoc
       );
-      console.log(data, updateDoc);
+
       res.send(response);
     });
 
     // payment intant
-    app.post("/payment-intent", async (req, res) => {
+    app.post("/payment-intent", verifyToken ,async (req, res) => {
       const { campId } = req.body;
+      
       const camp = await campainCollection.findOne({
         _id: new ObjectId(campId),
       });
@@ -478,9 +536,9 @@ async function run() {
     });
 
     // save payments
-    app.post("/payments", async (req, res) => {
+    app.post("/payments",verifyToken , async (req, res) => {
       const paymentData = req.body;
-      console.log(paymentData);
+    
       const response = await paymentCollection.insertOne({
         ...paymentData,
         paymentOn: new Date(),
@@ -489,15 +547,27 @@ async function run() {
         { _id: new ObjectId(paymentData.participantId) },
         { $set: { "payment-status": "paid" } }
       );
-      console.log(updRes);
+     
       res.send(response);
     });
 
     // get payment history
-    app.get("/payments/:email", async (req, res) => {
+    app.get("/payments/:email",verifyToken , async (req, res) => {
       const { email } = req.params;
-      const {page} = req.query
-      console.log(email, page);
+      const { page } = req.query;
+      const { search } = req.query;
+ 
+      let filter = {};
+      if (search) {
+        filter = {
+          $or: [
+            { campName: { $regex: search, $options: "i" } },
+            { campFees: { $regex: search, $options: "i" } },
+            { "confirmation-status": { $regex: search, $options: "i" } },
+            { "payment-status": { $regex: search, $options: "i" } },
+          ],
+        };
+      }
       const query = { participantEmail: email };
       const result = await paymentCollection
         .aggregate([
@@ -561,13 +631,15 @@ async function run() {
               camp: 0,
               campId: 0,
             },
-          },
+          }, {
+            $match : filter
+          }
         ])
         .skip((page - 1) * 10)
         .limit(10)
         .toArray();
-        const totalData = await paymentCollection.countDocuments(query);
-        res.send({ result, totalData });
+      const totalData = await paymentCollection.countDocuments(query);
+      res.send({ result, totalData });
     });
   } finally {
     // await client.close();
