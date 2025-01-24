@@ -75,7 +75,7 @@ async function run() {
     });
 
     // save Users
-    app.post("/users" ,verifyToken , async (req, res) => {
+    app.post("/users" , async (req, res) => {
       const data = req.body;
 
       const isExist = await userCollection.findOne({email:data.email})
